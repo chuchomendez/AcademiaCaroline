@@ -388,6 +388,44 @@
             width: auto;
             margin-right: 10px;
         }
+
+        .ticket-preview {
+            background: white;
+            border: 2px dashed #667eea;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        #ticketCanvas {
+            max-width: 100%;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+        }
+
+        .ticket-actions {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .logo-upload {
+            margin-bottom: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .logo-preview {
+            max-width: 200px;
+            max-height: 100px;
+            margin-top: 10px;
+            border-radius: 8px;
+        }
     </style>
 </head>
 <body>
@@ -544,6 +582,7 @@
                         </div>
                     </div>
                     <button class="btn btn-primary" onclick="registrarMensualidad()">Registrar Pago</button>
+                    <button class="btn btn-success" onclick="generarTicketMensualidad()">Generar Ticket de Pago</button>
                 </div>
 
                 <div class="card" id="historialPagosCard" style="display: none;">
@@ -561,6 +600,7 @@
                                 <th>Monto</th>
                                 <th>Fecha de Pago</th>
                                 <th>Estado</th>
+                                <th>Acciones</th>
                             </tr>
                         </thead>
                         <tbody id="listaMensualidades"></tbody>
@@ -611,6 +651,7 @@
                             <input type="date" id="fechaVenta">
                         </div>
                         <button class="btn btn-success" onclick="registrarVenta()">Registrar Venta</button>
+                        <button class="btn btn-primary" onclick="generarTicketVenta()">Generar Ticket de Venta</button>
                     </div>
                 </div>
 
@@ -639,6 +680,7 @@
                                 <th>Cantidad</th>
                                 <th>Total</th>
                                 <th>Alumna</th>
+                                <th>Acciones</th>
                             </tr>
                         </thead>
                         <tbody id="listaVentas"></tbody>
@@ -648,6 +690,19 @@
 
             <!-- PESTAÑA REPORTES -->
             <div id="reportes" class="tab-content">
+                <div class="card">
+                    <div class="card-header">Configuración del Logo</div>
+                    <div class="logo-upload">
+                        <label for="logoInput" class="btn btn-primary" style="cursor: pointer;">
+                            📷 Seleccionar Logo de la Academia
+                        </label>
+                        <input type="file" id="logoInput" accept="image/*" style="display: none;" onchange="cargarLogo(event)">
+                        <div id="logoPreviewContainer" style="margin-top: 15px;">
+                            <p style="color: #6c757d;">No hay logo cargado</p>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="stats">
                     <div class="stat-card">
                         <h3 id="totalAlumnas">0</h3>
@@ -726,6 +781,22 @@
         </div>
     </div>
 
+    <!-- Modal para ticket -->
+    <div id="modalTicket" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="cerrarModalTicket()">&times;</span>
+            <div class="modal-header">Ticket de Compra</div>
+            <div class="ticket-preview">
+                <canvas id="ticketCanvas"></canvas>
+            </div>
+            <div class="ticket-actions">
+                <button class="btn btn-primary" onclick="descargarTicket()">⬇️ Descargar PNG</button>
+                <button class="btn btn-success" onclick="compartirWhatsApp()">📱 Compartir por WhatsApp</button>
+                <button class="btn btn-danger" onclick="cerrarModalTicket()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Inicialización de datos
         let alumnas = [];
@@ -737,6 +808,8 @@
         let idCounter = 1;
         let idProducto = 1;
         let idGrupo = 1;
+        let logoAcademia = null;
+        let ticketActual = null;
 
         // Cargar datos del localStorage al iniciar
         window.onload = function() {
@@ -761,6 +834,11 @@
                 idCounter = datos.idCounter || 1;
                 idProducto = datos.idProducto || 1;
                 idGrupo = datos.idGrupo || 1;
+                logoAcademia = datos.logoAcademia || null;
+                
+                if (logoAcademia) {
+                    mostrarLogoPreview();
+                }
             }
         }
 
@@ -774,7 +852,8 @@
                 grupos,
                 idCounter,
                 idProducto,
-                idGrupo
+                idGrupo,
+                logoAcademia
             };
             localStorage.setItem('academiaDanza', JSON.stringify(datos));
         }
@@ -1111,6 +1190,7 @@
             const alumna = alumnas.find(a => a.id === alumnaId);
 
             const mensualidad = {
+                id: Date.now(), // ID único para cada mensualidad
                 alumnaId,
                 nombreAlumna: alumna.nombre,
                 periodo,
@@ -1143,6 +1223,11 @@
                     <td>$${mensualidad.monto.toFixed(2)}</td>
                     <td>${new Date(mensualidad.fecha).toLocaleDateString()}</td>
                     <td><span class="badge badge-success">Pagado</span></td>
+                    <td>
+                        <button class="btn btn-primary" onclick="regenerarTicketMensualidad(${mensualidad.id || 0})">
+                            🎫 Ticket
+                        </button>
+                    </td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -1292,6 +1377,7 @@
             }
 
             const venta = {
+                id: Date.now(), // ID único para cada venta
                 fecha,
                 productoId,
                 nombreProducto: producto.nombre,
@@ -1331,6 +1417,11 @@
                     <td>${venta.cantidad}</td>
                     <td>$${venta.total.toFixed(2)}</td>
                     <td>${venta.nombreAlumna}</td>
+                    <td>
+                        <button class="btn btn-primary" onclick="regenerarTicketVenta(${venta.id || 0})">
+                            🎫 Ticket
+                        </button>
+                    </td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -1410,6 +1501,355 @@
             actualizarSelectProductos();
             actualizarListaVentas();
             actualizarListaGrupos();
+        }
+
+        // GESTIÓN DE LOGO
+        function cargarLogo(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                logoAcademia = e.target.result;
+                guardarDatos();
+                mostrarLogoPreview();
+                mostrarAlerta('Logo cargado exitosamente', 'success');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function mostrarLogoPreview() {
+            const container = document.getElementById('logoPreviewContainer');
+            if (logoAcademia) {
+                container.innerHTML = `
+                    <img src="${logoAcademia}" class="logo-preview" alt="Logo de la academia">
+                    <br>
+                    <button class="btn btn-danger" onclick="eliminarLogo()" style="margin-top: 10px;">Eliminar Logo</button>
+                `;
+            } else {
+                container.innerHTML = '<p style="color: #6c757d;">No hay logo cargado</p>';
+            }
+        }
+
+        function eliminarLogo() {
+            if (confirm('¿Está seguro de eliminar el logo?')) {
+                logoAcademia = null;
+                guardarDatos();
+                mostrarLogoPreview();
+                mostrarAlerta('Logo eliminado', 'success');
+            }
+        }
+
+        // GENERACIÓN DE TICKETS
+        function generarTicketMensualidad() {
+            const alumnaId = parseInt(document.getElementById('alumnaMensualidad').value);
+            const periodo = document.getElementById('periodoMensualidad').value;
+            const monto = parseFloat(document.getElementById('montoMensualidad').value);
+            const fecha = document.getElementById('fechaMensualidad').value;
+
+            if (!alumnaId || !periodo || !monto || !fecha) {
+                alert('Por favor complete todos los campos para generar el ticket');
+                return;
+            }
+
+            const alumna = alumnas.find(a => a.id === alumnaId);
+
+            ticketActual = {
+                tipo: 'mensualidad',
+                alumna: alumna.nombre,
+                concepto: `Mensualidad - ${periodo}`,
+                monto: monto,
+                fecha: fecha
+            };
+
+            dibujarTicket();
+            document.getElementById('modalTicket').classList.add('active');
+        }
+
+        function regenerarTicketMensualidad(mensualidadId) {
+            const mensualidad = mensualidades.find(m => m.id === mensualidadId);
+            
+            if (!mensualidad) {
+                alert('No se pudo encontrar la mensualidad');
+                return;
+            }
+
+            ticketActual = {
+                tipo: 'mensualidad',
+                alumna: mensualidad.nombreAlumna,
+                concepto: `Mensualidad - ${mensualidad.periodo}`,
+                monto: mensualidad.monto,
+                fecha: mensualidad.fecha
+            };
+
+            dibujarTicket();
+            document.getElementById('modalTicket').classList.add('active');
+        }
+
+        function generarTicketVenta() {
+            const productoId = parseInt(document.getElementById('productoVenta').value);
+            const alumnaId = parseInt(document.getElementById('alumnaVenta').value) || null;
+            const cantidad = parseInt(document.getElementById('cantidadVenta').value);
+            const fecha = document.getElementById('fechaVenta').value;
+
+            if (!productoId || !cantidad || !fecha) {
+                alert('Por favor complete todos los campos para generar el ticket');
+                return;
+            }
+
+            const producto = productos.find(p => p.id === productoId);
+            const alumna = alumnaId ? alumnas.find(a => a.id === alumnaId) : null;
+
+            ticketActual = {
+                tipo: 'venta',
+                alumna: alumna ? alumna.nombre : 'Cliente',
+                concepto: `${producto.nombre} x${cantidad}`,
+                precioUnitario: producto.precio,
+                cantidad: cantidad,
+                monto: producto.precio * cantidad,
+                fecha: fecha
+            };
+
+            dibujarTicket();
+            document.getElementById('modalTicket').classList.add('active');
+        }
+
+        function regenerarTicketVenta(ventaId) {
+            const venta = ventas.find(v => v.id === ventaId);
+            
+            if (!venta) {
+                alert('No se pudo encontrar la venta');
+                return;
+            }
+
+            ticketActual = {
+                tipo: 'venta',
+                alumna: venta.nombreAlumna,
+                concepto: `${venta.nombreProducto} x${venta.cantidad}`,
+                precioUnitario: venta.precioUnitario,
+                cantidad: venta.cantidad,
+                monto: venta.total,
+                fecha: venta.fecha
+            };
+
+            dibujarTicket();
+            document.getElementById('modalTicket').classList.add('active');
+        }
+
+        function dibujarTicket() {
+            const canvas = document.getElementById('ticketCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Configurar tamaño del ticket
+            canvas.width = 400;
+            canvas.height = 600;
+
+            // Fondo blanco
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Borde decorativo
+            ctx.strokeStyle = '#667eea';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(10, 10, canvas.width - 20, canvas.height - 20);
+
+            let y = 40;
+
+            // Cargar y dibujar logo si existe
+            if (logoAcademia) {
+                const img = new Image();
+                img.onload = function() {
+                    const logoHeight = 80;
+                    const logoWidth = (img.width / img.height) * logoHeight;
+                    const logoX = (canvas.width - logoWidth) / 2;
+                    ctx.drawImage(img, logoX, y, logoWidth, logoHeight);
+                    
+                    y += logoHeight + 20;
+                    continuarDibujoTicket(ctx, y);
+                };
+                img.src = logoAcademia;
+            } else {
+                // Si no hay logo, dibujar nombre
+                ctx.fillStyle = '#667eea';
+                ctx.font = 'bold 24px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('🩰 Academia de Danza', canvas.width / 2, y);
+                y += 40;
+                continuarDibujoTicket(ctx, y);
+            }
+        }
+
+        function continuarDibujoTicket(ctx, y) {
+            const canvas = ctx.canvas;
+
+            // Línea separadora
+            ctx.strokeStyle = '#dee2e6';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(30, y);
+            ctx.lineTo(canvas.width - 30, y);
+            ctx.stroke();
+            y += 30;
+
+            // Título del ticket
+            ctx.fillStyle = '#667eea';
+            ctx.font = 'bold 20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('TICKET DE ' + (ticketActual.tipo === 'mensualidad' ? 'PAGO' : 'VENTA'), canvas.width / 2, y);
+            y += 40;
+
+            // Información del ticket
+            ctx.fillStyle = '#333333';
+            ctx.font = '16px Arial';
+            ctx.textAlign = 'left';
+
+            // Número de ticket
+            const numeroTicket = Date.now().toString().slice(-8);
+            ctx.fillText('No. Ticket: ' + numeroTicket, 40, y);
+            y += 30;
+
+            // Fecha
+            const fechaFormateada = new Date(ticketActual.fecha).toLocaleDateString('es-MX', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+            ctx.fillText('Fecha: ' + fechaFormateada, 40, y);
+            y += 30;
+
+            // Cliente/Alumna
+            ctx.fillText('Cliente: ' + ticketActual.alumna, 40, y);
+            y += 40;
+
+            // Línea separadora
+            ctx.strokeStyle = '#dee2e6';
+            ctx.beginPath();
+            ctx.moveTo(30, y);
+            ctx.lineTo(canvas.width - 30, y);
+            ctx.stroke();
+            y += 30;
+
+            // Concepto
+            ctx.font = 'bold 16px Arial';
+            ctx.fillText('CONCEPTO:', 40, y);
+            y += 25;
+            
+            ctx.font = '15px Arial';
+            const concepto = ticketActual.concepto;
+            const maxWidth = canvas.width - 80;
+            const words = concepto.split(' ');
+            let line = '';
+            
+            for (let i = 0; i < words.length; i++) {
+                const testLine = line + words[i] + ' ';
+                const metrics = ctx.measureText(testLine);
+                
+                if (metrics.width > maxWidth && i > 0) {
+                    ctx.fillText(line, 40, y);
+                    line = words[i] + ' ';
+                    y += 25;
+                } else {
+                    line = testLine;
+                }
+            }
+            ctx.fillText(line, 40, y);
+            y += 40;
+
+            // Si es venta, mostrar detalles
+            if (ticketActual.tipo === 'venta') {
+                ctx.font = '14px Arial';
+                ctx.fillText('Precio unitario: $' + ticketActual.precioUnitario.toFixed(2), 40, y);
+                y += 25;
+                ctx.fillText('Cantidad: ' + ticketActual.cantidad, 40, y);
+                y += 35;
+            }
+
+            // Línea separadora
+            ctx.strokeStyle = '#dee2e6';
+            ctx.beginPath();
+            ctx.moveTo(30, y);
+            ctx.lineTo(canvas.width - 30, y);
+            ctx.stroke();
+            y += 30;
+
+            // Total
+            ctx.fillStyle = '#667eea';
+            ctx.font = 'bold 24px Arial';
+            ctx.fillText('TOTAL:', 40, y);
+            
+            ctx.textAlign = 'right';
+            ctx.fillText('$' + ticketActual.monto.toFixed(2), canvas.width - 40, y);
+            y += 50;
+
+            // Línea separadora
+            ctx.strokeStyle = '#dee2e6';
+            ctx.beginPath();
+            ctx.moveTo(30, y);
+            ctx.lineTo(canvas.width - 30, y);
+            ctx.stroke();
+            y += 30;
+
+            // Mensaje de agradecimiento
+            ctx.fillStyle = '#666666';
+            ctx.font = 'italic 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('¡Gracias por su preferencia!', canvas.width / 2, y);
+            y += 25;
+            
+            const ahora = new Date().toLocaleString('es-MX');
+            ctx.font = '12px Arial';
+            ctx.fillText('Impreso: ' + ahora, canvas.width / 2, y);
+        }
+
+        function cerrarModalTicket() {
+            document.getElementById('modalTicket').classList.remove('active');
+        }
+
+        function descargarTicket() {
+            const canvas = document.getElementById('ticketCanvas');
+            const link = document.createElement('a');
+            const numeroTicket = Date.now().toString().slice(-8);
+            link.download = `ticket_${numeroTicket}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            mostrarAlerta('Ticket descargado exitosamente', 'success');
+        }
+
+        function compartirWhatsApp() {
+            const canvas = document.getElementById('ticketCanvas');
+            canvas.toBlob(function(blob) {
+                const file = new File([blob], 'ticket.png', { type: 'image/png' });
+                
+                if (navigator.share) {
+                    navigator.share({
+                        title: 'Ticket de Compra',
+                        text: `Ticket de ${ticketActual.tipo} - Academia de Danza`,
+                        files: [file]
+                    }).then(() => {
+                        mostrarAlerta('Compartido exitosamente', 'success');
+                    }).catch((error) => {
+                        console.log('Error al compartir:', error);
+                        compartirWhatsAppAlternativo();
+                    });
+                } else {
+                    compartirWhatsAppAlternativo();
+                }
+            }, 'image/png');
+        }
+
+        function compartirWhatsAppAlternativo() {
+            // Método alternativo: generar enlace de WhatsApp con texto
+            const mensaje = `*Ticket de ${ticketActual.tipo === 'mensualidad' ? 'Pago' : 'Venta'}*%0A%0A` +
+                          `Cliente: ${ticketActual.alumna}%0A` +
+                          `Concepto: ${ticketActual.concepto}%0A` +
+                          `Total: $${ticketActual.monto.toFixed(2)}%0A` +
+                          `Fecha: ${new Date(ticketActual.fecha).toLocaleDateString()}%0A%0A` +
+                          `Academia de Danza`;
+            
+            const urlWhatsApp = `https://wa.me/?text=${mensaje}`;
+            window.open(urlWhatsApp, '_blank');
+            
+            alert('Nota: En dispositivos móviles, primero descarga el ticket y luego compártelo manualmente por WhatsApp para incluir la imagen.');
         }
     </script>
 </body>
